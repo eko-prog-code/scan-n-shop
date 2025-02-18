@@ -75,7 +75,17 @@ const Scanner = () => {
     startScanner();
     
     return () => {
-      stopScanner();
+      if (scannerRef.current && isScanning) {
+        scannerRef.current.stop()
+          .catch(() => {
+            // Silently handle the error during cleanup
+            // This prevents the "scanner not running" error from being thrown
+          })
+          .finally(() => {
+            setIsScanning(false);
+            scannerRef.current = null;
+          });
+      }
     };
   }, []);
 
