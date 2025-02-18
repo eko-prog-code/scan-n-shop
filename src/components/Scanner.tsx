@@ -9,6 +9,11 @@ import type { Product } from '@/types/product';
 const Scanner = () => {
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [lastScan, setLastScan] = useState<{
+    barcode: string;
+    status: 'success' | 'error';
+    message: string;
+  } | null>(null);
 
   const handleScan = async (decodedText: string) => {
     try {
@@ -27,12 +32,27 @@ const Scanner = () => {
         };
         await set(ref(db, `global/items/${foundItem.id}`), updatedItem);
         toast.success(`Added ${foundItem.name} to cart`);
+        setLastScan({
+          barcode: decodedText,
+          status: 'success',
+          message: `Product found: ${foundItem.name}`
+        });
       } else {
         toast.error('Product not found');
+        setLastScan({
+          barcode: decodedText,
+          status: 'error',
+          message: 'Product not found in database'
+        });
       }
     } catch (error) {
       toast.error('Error processing scan');
       console.error('Scan error:', error);
+      setLastScan({
+        barcode: decodedText,
+        status: 'error',
+        message: 'Error processing scan'
+      });
     }
   };
 
@@ -54,6 +74,7 @@ const Scanner = () => {
         }
       );
       setIsScanning(true);
+      setLastScan(null);
     } catch (err) {
       console.error('Failed to start scanner:', err);
       toast.error('Failed to start camera. Please check permissions.');
@@ -102,6 +123,19 @@ const Scanner = () => {
             >
               Start Scanner
             </button>
+          </div>
+        )}
+        {lastScan && (
+          <div className={`p-4 border-t ${
+            lastScan.status === 'success' ? 'bg-green-50' : 'bg-red-50'
+          }`}>
+            <p className="font-medium mb-1">Last Scan Result:</p>
+            <p className="text-sm text-gray-600">Barcode: {lastScan.barcode}</p>
+            <p className={`text-sm ${
+              lastScan.status === 'success' ? 'text-green-600' : 'text-red-600'
+            }`}>
+              {lastScan.message}
+            </p>
           </div>
         )}
       </div>
