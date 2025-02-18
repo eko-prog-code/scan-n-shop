@@ -1,7 +1,6 @@
-
 import { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
-import { ref, get, set } from 'firebase/database';
+import { ref, get, push } from 'firebase/database';
 import { db } from '@/lib/firebase';
 import { toast } from 'sonner';
 import type { Product } from '@/types/product';
@@ -17,25 +16,26 @@ const Scanner = () => {
 
   const handleScan = async (decodedText: string) => {
     try {
-      const itemRef = ref(db, `global/items`);
-      const snapshot = await get(itemRef);
-      const items = snapshot.val() as Record<string, Product> || {};
+      const productRef = ref(db, `products`); // Mengambil data dari "products"
+      const snapshot = await get(productRef);
+      const products = snapshot.val() as Record<string, Product> || {};
       
-      const foundItem = Object.values(items).find((item: Product) => 
-        item.barcode === decodedText
+      const foundProduct = Object.values(products).find((product: Product) => 
+        product.barcode === decodedText
       );
 
-      if (foundItem) {
-        const updatedItem: Product = {
-          ...foundItem,
-          quantity: (foundItem.quantity || 0) + 1
-        };
-        await set(ref(db, `global/items/${foundItem.id}`), updatedItem);
-        toast.success(`Added ${foundItem.name} to cart`);
+      if (foundProduct) {
+        const cartRef = ref(db, `cart`); // Menambahkan ke cart, bukan meng-update produk lama
+        await push(cartRef, {
+          ...foundProduct,
+          quantity: 1, // Produk baru selalu ditambahkan dengan quantity 1
+        });
+
+        toast.success(`Added ${foundProduct.name} to cart`);
         setLastScan({
           barcode: decodedText,
           status: 'success',
-          message: `Product found: ${foundItem.name}`
+          message: `Product found: ${foundProduct.name}`
         });
       } else {
         toast.error('Product not found');
@@ -99,8 +99,7 @@ const Scanner = () => {
       if (scannerRef.current && isScanning) {
         scannerRef.current.stop()
           .catch(() => {
-            // Silently handle the error during cleanup
-            // This prevents the "scanner not running" error from being thrown
+            // Menangani error scanner yang tidak aktif
           })
           .finally(() => {
             setIsScanning(false);
