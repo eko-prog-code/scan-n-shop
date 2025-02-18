@@ -1,9 +1,12 @@
-
 import Scanner from '@/components/Scanner';
 import Cart from '@/components/Cart';
 import { motion } from 'framer-motion';
 
 const Index = () => {
+  const handleReload = () => {
+    window.location.reload();
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 0 }}
@@ -19,7 +22,16 @@ const Index = () => {
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="grid md:grid-cols-2 gap-6">
           <Scanner />
-          <Cart />
+          <div>
+            {/* Button Reload */}
+            <button 
+              onClick={handleReload}
+              className="mb-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+            >
+              Reload
+            </button>
+            <Cart />
+          </div>
         </div>
       </main>
     </motion.div>
