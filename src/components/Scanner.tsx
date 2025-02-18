@@ -35,17 +35,19 @@ const Scanner = () => {
         return;
       }
 
-      // Menggunakan barcode sebagai key untuk menghindari duplikasi.
+      // Gunakan barcode sebagai key untuk menghindari duplikasi.
+      // Dengan begitu, jika produk dengan barcode yang sama sudah ada,
+      // transaksi akan dibatalkan.
       const itemRef = ref(db, `cart/global/items/${foundProduct.barcode}`);
 
       // Gunakan transaction agar pengecekan dan penambahan terjadi secara atomik.
       const transactionResult = await runTransaction(itemRef, (currentData) => {
         if (currentData !== null) {
-          // Jika produk sudah ada, batalkan transaction
+          // Jika produk sudah ada, batalkan transaction.
           return;
         }
-        // Jika belum ada, tambahkan produk dengan quantity 1
-        // Penting: tetapkan properti id sebagai barcode untuk konsistensi
+        // Jika belum ada, tambahkan produk dengan quantity 1.
+        // Penting: tetapkan properti id sebagai barcode untuk konsistensi.
         return {
           ...foundProduct,
           id: foundProduct.barcode, // Override id dengan barcode
@@ -149,14 +151,10 @@ const Scanner = () => {
           </div>
         )}
         {lastScan && (
-          <div className={`p-4 border-t ${
-            lastScan.status === 'success' ? 'bg-green-50' : 'bg-red-50'
-          }`}>
+          <div className={`p-4 border-t ${lastScan.status === 'success' ? 'bg-green-50' : 'bg-red-50'}`}>
             <p className="font-medium mb-1">Hasil Scan Terakhir:</p>
             <p className="text-sm text-gray-600">Barcode: {lastScan.barcode}</p>
-            <p className={`text-sm ${
-              lastScan.status === 'success' ? 'text-green-600' : 'text-red-600'
-            }`}>
+            <p className={`text-sm ${lastScan.status === 'success' ? 'text-green-600' : 'text-red-600'}`}>
               {lastScan.message}
             </p>
           </div>
