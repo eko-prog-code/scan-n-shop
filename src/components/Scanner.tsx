@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
-import { ref, get, set, push } from 'firebase/database';
+import { ref, get, runTransaction } from 'firebase/database';
 import { db } from '@/lib/firebase';
 import { toast } from 'sonner';
 import type { Product } from '@/types/product';
@@ -16,63 +16,63 @@ const Scanner = () => {
 
   const handleScan = async (decodedText: string) => {
     try {
+      // Cari produk berdasarkan barcode di database
       const productRef = ref(db, `products`);
       const snapshot = await get(productRef);
-      const products = snapshot.val() as Record<string, Product> || {};
-      
-      const foundProduct = Object.values(products).find((product: Product) => 
-        product.barcode === decodedText
+      const products = (snapshot.val() as Record<string, Product>) || {};
+
+      const foundProduct = Object.values(products).find(
+        (product: Product) => product.barcode === decodedText
       );
 
       if (!foundProduct) {
-        toast.error('Product not found');
+        toast.error('Produk tidak ditemukan');
         setLastScan({
           barcode: decodedText,
           status: 'error',
-          message: 'Product not found in database'
+          message: 'Produk tidak ditemukan di database'
         });
         return;
       }
 
-      // Ambil referensi cart > global > items
-      const itemsRef = ref(db, `cart/global/items`);
-      const itemsSnapshot = await get(itemsRef);
-      const items = itemsSnapshot.val() || {};
+      // Menggunakan barcode sebagai key untuk menghindari duplikasi.
+      const itemRef = ref(db, `cart/global/items/${foundProduct.barcode}`);
 
-      // Cek apakah barcode sudah ada di items
-      const existingItemKey = Object.keys(items).find((key) => 
-        items[key].barcode === foundProduct.barcode
-      );
+      // Gunakan transaction agar pengecekan dan penambahan terjadi secara atomik.
+      const transactionResult = await runTransaction(itemRef, (currentData) => {
+        if (currentData !== null) {
+          // Jika produk sudah ada, batalkan transaction
+          return;
+        }
+        // Jika belum ada, tambahkan produk dengan quantity 1
+        return {
+          ...foundProduct,
+          quantity: 1,
+        };
+      });
 
-      if (existingItemKey) {
-        toast.error(`Product "${foundProduct.name}" already exists in cart`);
+      if (!transactionResult.committed) {
+        toast.error(`Produk "${foundProduct.name}" sudah ada di cart`);
         setLastScan({
           barcode: decodedText,
           status: 'error',
-          message: `Product "${foundProduct.name}" is already in cart`
+          message: `Produk "${foundProduct.name}" sudah ada di cart`
         });
       } else {
-        // Tambahkan produk ke items
-        const newItemRef = push(itemsRef);
-        await set(newItemRef, {
-          ...foundProduct,
-          quantity: 1, // Produk baru selalu ditambahkan dengan quantity 1
-        });
-
-        toast.success(`Added ${foundProduct.name} to cart`);
+        toast.success(`Produk "${foundProduct.name}" berhasil ditambahkan ke cart`);
         setLastScan({
           barcode: decodedText,
           status: 'success',
-          message: `Product added: ${foundProduct.name}`
+          message: `Produk ditambahkan: ${foundProduct.name}`
         });
       }
     } catch (error) {
-      toast.error('Error processing scan');
+      toast.error('Terjadi kesalahan saat memproses scan');
       console.error('Scan error:', error);
       setLastScan({
         barcode: decodedText,
         status: 'error',
-        message: 'Error processing scan'
+        message: 'Terjadi kesalahan saat memproses scan'
       });
     }
   };
@@ -97,8 +97,8 @@ const Scanner = () => {
       setIsScanning(true);
       setLastScan(null);
     } catch (err) {
-      console.error('Failed to start scanner:', err);
-      toast.error('Failed to start camera. Please check permissions.');
+      console.error('Gagal memulai scanner:', err);
+      toast.error('Gagal mengaktifkan kamera. Pastikan izin sudah diberikan.');
     }
   };
 
@@ -108,19 +108,20 @@ const Scanner = () => {
         await scannerRef.current.stop();
         setIsScanning(false);
       } catch (err) {
-        console.error('Error stopping scanner:', err);
+        console.error('Error menghentikan scanner:', err);
       }
     }
   };
 
   useEffect(() => {
     startScanner();
-    
+
     return () => {
       if (scannerRef.current && isScanning) {
-        scannerRef.current.stop()
+        scannerRef.current
+          .stop()
           .catch(() => {
-            // Menangani error scanner yang tidak aktif
+            // Menangani error jika scanner sudah tidak aktif
           })
           .finally(() => {
             setIsScanning(false);
@@ -136,12 +137,12 @@ const Scanner = () => {
         <div id="reader" className="w-full aspect-square" />
         {!isScanning && (
           <div className="p-4 text-center">
-            <p className="text-gray-600 mb-2">Camera not active</p>
+            <p className="text-gray-600 mb-2">Kamera tidak aktif</p>
             <button 
               onClick={startScanner}
               className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
             >
-              Start Scanner
+              Mulai Scanner
             </button>
           </div>
         )}
@@ -149,7 +150,7 @@ const Scanner = () => {
           <div className={`p-4 border-t ${
             lastScan.status === 'success' ? 'bg-green-50' : 'bg-red-50'
           }`}>
-            <p className="font-medium mb-1">Last Scan Result:</p>
+            <p className="font-medium mb-1">Hasil Scan Terakhir:</p>
             <p className="text-sm text-gray-600">Barcode: {lastScan.barcode}</p>
             <p className={`text-sm ${
               lastScan.status === 'success' ? 'text-green-600' : 'text-red-600'
