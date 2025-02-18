@@ -20,16 +20,17 @@ const Index = () => {
       </header>
       
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="grid md:grid-cols-2 gap-6">
-          <Scanner />
-          <div>
-            {/* Button Reload */}
-            <button 
-              onClick={handleReload}
-              className="mb-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-            >
-              Reload
-            </button>
+        <div className="flex flex-col items-center space-y-6">
+          {/* Button Reload di tengah dengan icon */}
+          <button 
+            onClick={handleReload}
+            className="px-6 py-3 bg-blue-500 text-white rounded-full hover:bg-blue-600 transition-colors flex items-center space-x-2"
+          >
+            <span role="img" aria-label="reload">🔄</span>
+            <span>Reload</span>
+          </button>
+          <div className="grid md:grid-cols-2 gap-6 w-full">
+            <Scanner />
             <Cart />
           </div>
         </div>
