@@ -67,7 +67,7 @@ const Scanner = () => {
           message: `Produk ditambahkan: ${foundProduct.name}`
         });
         // Hanya memutar audio jika produk berhasil ditambahkan ke cart.
-        const audio = new Audio('/components/audio.mp3'); // pastikan path sudah benar
+        const audio = new Audio('/audio.mp3'); // Path ke file audio di folder public
         audio.play().catch((err) => {
           console.error("Error memutar audio:", err);
         });
