@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { ref, onValue } from 'firebase/database';
 import { db } from '@/lib/firebase';
@@ -46,6 +45,8 @@ const Cart = () => {
                 />
                 <div className="flex-1">
                   <h3 className="font-medium">{item.name}</h3>
+                  {/* Menampilkan barcode produk */}
+                  <p className="text-sm text-gray-500">Barcode: {item.barcode}</p>
                   <p className="text-sm text-gray-600">
                     {item.quantity} × ${item.regularPrice.toFixed(2)}
                   </p>
