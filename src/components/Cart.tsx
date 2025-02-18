@@ -8,14 +8,12 @@ const Cart = () => {
   const [items, setItems] = useState<Product[]>([]);
 
   useEffect(() => {
-    const itemsRef = ref(db, 'global/items');
+    // Mengambil data dari path "cart/global/items"
+    const itemsRef = ref(db, "cart/global/items");
     const unsubscribe = onValue(itemsRef, (snapshot) => {
       const data = snapshot.val() as Record<string, Product>;
       if (data) {
-        // Hanya mengambil produk dengan quantity lebih dari 0
-        const itemsArray = Object.values(data).filter(
-          (item) => item.quantity && item.quantity > 0
-        );
+        const itemsArray = Object.values(data);
         setItems(itemsArray);
       } else {
         setItems([]);
