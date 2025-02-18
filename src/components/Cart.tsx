@@ -3,25 +3,18 @@ import { useEffect, useState } from 'react';
 import { ref, onValue } from 'firebase/database';
 import { db } from '@/lib/firebase';
 import { motion, AnimatePresence } from 'framer-motion';
-
-interface CartItem {
-  id: string;
-  name: string;
-  image: string;
-  quantity: number;
-  regularPrice: number;
-}
+import type { Product } from '@/types/product';
 
 const Cart = () => {
-  const [items, setItems] = useState<CartItem[]>([]);
+  const [items, setItems] = useState<Product[]>([]);
 
   useEffect(() => {
     const itemsRef = ref(db, 'global/items');
     const unsubscribe = onValue(itemsRef, (snapshot) => {
-      const data = snapshot.val();
+      const data = snapshot.val() as Record<string, Product>;
       if (data) {
-        const itemsArray = Object.values(data).filter((item: any) => item.quantity > 0);
-        setItems(itemsArray as CartItem[]);
+        const itemsArray = Object.values(data).filter((item) => item.quantity && item.quantity > 0);
+        setItems(itemsArray);
       } else {
         setItems([]);
       }
@@ -30,7 +23,7 @@ const Cart = () => {
     return () => unsubscribe();
   }, []);
 
-  const total = items.reduce((sum, item) => sum + item.regularPrice * item.quantity, 0);
+  const total = items.reduce((sum, item) => sum + item.regularPrice * (item.quantity || 0), 0);
 
   return (
     <div className="w-full max-w-lg mx-auto p-4">
@@ -59,7 +52,7 @@ const Cart = () => {
                 </div>
                 <div className="text-right">
                   <p className="font-medium">
-                    ${(item.regularPrice * item.quantity).toFixed(2)}
+                    ${(item.regularPrice * (item.quantity || 0)).toFixed(2)}
                   </p>
                 </div>
               </motion.div>

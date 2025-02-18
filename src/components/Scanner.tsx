@@ -4,6 +4,7 @@ import { Html5Qrcode } from 'html5-qrcode';
 import { ref, get, set } from 'firebase/database';
 import { db } from '@/lib/firebase';
 import { toast } from 'sonner';
+import type { Product } from '@/types/product';
 
 const Scanner = () => {
   const scannerRef = useRef<Html5Qrcode | null>(null);
@@ -12,14 +13,14 @@ const Scanner = () => {
     try {
       const itemRef = ref(db, `global/items`);
       const snapshot = await get(itemRef);
-      const items = snapshot.val() || {};
+      const items = snapshot.val() as Record<string, Product> || {};
       
-      const foundItem = Object.values(items).find((item: any) => 
+      const foundItem = Object.values(items).find((item: Product) => 
         item.barcode === decodedText
       );
 
       if (foundItem) {
-        const updatedItem = {
+        const updatedItem: Product = {
           ...foundItem,
           quantity: (foundItem.quantity || 0) + 1
         };
