@@ -45,8 +45,10 @@ const Scanner = () => {
           return;
         }
         // Jika belum ada, tambahkan produk dengan quantity 1
+        // Penting: tetapkan properti id sebagai barcode untuk konsistensi
         return {
           ...foundProduct,
+          id: foundProduct.barcode, // Override id dengan barcode
           quantity: 1,
         };
       });
