@@ -36,18 +36,15 @@ const Scanner = () => {
       }
 
       // Gunakan barcode sebagai key untuk menghindari duplikasi.
-      // Dengan begitu, jika produk dengan barcode yang sama sudah ada,
-      // transaksi akan dibatalkan.
       const itemRef = ref(db, `cart/global/items/${foundProduct.barcode}`);
 
-      // Gunakan transaction agar pengecekan dan penambahan terjadi secara atomik.
+      // Transaction untuk pengecekan dan penambahan secara atomik.
       const transactionResult = await runTransaction(itemRef, (currentData) => {
         if (currentData !== null) {
           // Jika produk sudah ada, batalkan transaction.
           return;
         }
         // Jika belum ada, tambahkan produk dengan quantity 1.
-        // Penting: tetapkan properti id sebagai barcode untuk konsistensi.
         return {
           ...foundProduct,
           id: foundProduct.barcode, // Override id dengan barcode
@@ -68,6 +65,11 @@ const Scanner = () => {
           barcode: decodedText,
           status: 'success',
           message: `Produk ditambahkan: ${foundProduct.name}`
+        });
+        // Hanya memutar audio jika produk berhasil ditambahkan ke cart.
+        const audio = new Audio('/components/audio.mp3'); // pastikan path sudah benar
+        audio.play().catch((err) => {
+          console.error("Error memutar audio:", err);
         });
       }
     } catch (error) {
