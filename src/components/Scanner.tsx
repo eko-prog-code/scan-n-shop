@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
-import { ref, get, push } from 'firebase/database';
+import { ref, get, set, push } from 'firebase/database';
 import { db } from '@/lib/firebase';
 import { toast } from 'sonner';
 import type { Product } from '@/types/product';
@@ -16,7 +16,7 @@ const Scanner = () => {
 
   const handleScan = async (decodedText: string) => {
     try {
-      const productRef = ref(db, `products`); // Mengambil data dari "products"
+      const productRef = ref(db, `products`);
       const snapshot = await get(productRef);
       const products = snapshot.val() as Record<string, Product> || {};
       
@@ -24,9 +24,37 @@ const Scanner = () => {
         product.barcode === decodedText
       );
 
-      if (foundProduct) {
-        const cartRef = ref(db, `cart`); // Menambahkan ke cart, bukan meng-update produk lama
-        await push(cartRef, {
+      if (!foundProduct) {
+        toast.error('Product not found');
+        setLastScan({
+          barcode: decodedText,
+          status: 'error',
+          message: 'Product not found in database'
+        });
+        return;
+      }
+
+      // Ambil referensi cart > global > items
+      const itemsRef = ref(db, `cart/global/items`);
+      const itemsSnapshot = await get(itemsRef);
+      const items = itemsSnapshot.val() || {};
+
+      // Cek apakah barcode sudah ada di items
+      const existingItemKey = Object.keys(items).find((key) => 
+        items[key].barcode === foundProduct.barcode
+      );
+
+      if (existingItemKey) {
+        toast.error(`Product "${foundProduct.name}" already exists in cart`);
+        setLastScan({
+          barcode: decodedText,
+          status: 'error',
+          message: `Product "${foundProduct.name}" is already in cart`
+        });
+      } else {
+        // Tambahkan produk ke items
+        const newItemRef = push(itemsRef);
+        await set(newItemRef, {
           ...foundProduct,
           quantity: 1, // Produk baru selalu ditambahkan dengan quantity 1
         });
@@ -35,14 +63,7 @@ const Scanner = () => {
         setLastScan({
           barcode: decodedText,
           status: 'success',
-          message: `Product found: ${foundProduct.name}`
-        });
-      } else {
-        toast.error('Product not found');
-        setLastScan({
-          barcode: decodedText,
-          status: 'error',
-          message: 'Product not found in database'
+          message: `Product added: ${foundProduct.name}`
         });
       }
     } catch (error) {
