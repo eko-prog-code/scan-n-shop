@@ -15,6 +15,7 @@ const Scanner = () => {
     message: string;
   } | null>(null);
 
+  // Cetak log ke console dan juga ke elemen debug di UI
   const logDebug = (msg: string) => {
     console.log(msg);
     if (debugRef.current) {
@@ -23,32 +24,34 @@ const Scanner = () => {
     }
   };
 
+  // Salin isi debug ke clipboard
   const copyDebugToClipboard = async () => {
-    if (debugRef.current) {
-      const text = debugRef.current.innerText;
-      try {
-        await navigator.clipboard.writeText(text);
-        toast.success("Debug console berhasil disalin");
-      } catch (err) {
-        toast.error("Gagal menyalin debug console");
-        console.error("Copy to clipboard error:", err);
-      }
+    if (!debugRef.current) return;
+    const text = debugRef.current.innerText;
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Debug console berhasil disalin");
+    } catch (err) {
+      toast.error("Gagal menyalin debug console");
+      console.error("Copy to clipboard error:", err);
     }
   };
 
   const handleScan = async (decodedText: string) => {
     try {
-      logDebug(`--- Mulai handleScan untuk barcode: ${decodedText} ---`);
+      logDebug(`--- handleScan: mencoba barcode "${decodedText}" ---`);
 
-      // 1) Cari produk berdasarkan barcode
+      // 1) Ambil semua produk
       const prodSnap = await get(ref(db, "products"));
       const products = (prodSnap.val() as Record<string, Product>) || {};
-      logDebug(`Jumlah produk di database: ${Object.keys(products).length}`);
+      logDebug(`Produk di database: ${Object.keys(products).length} item`);
 
+      // Cari entry [key, productObj] yang barcode-nya cocok
       const entries = Object.entries(products);
       const foundEntry = entries.find(([, p]) => p.barcode === decodedText);
+
       if (!foundEntry) {
-        logDebug(`Produk dengan barcode ${decodedText} tidak ditemukan.`);
+        logDebug(`❌ Produk dengan barcode "${decodedText}" tidak ditemukan.`);
         toast.error("Produk tidak ditemukan di database");
         setLastScan({
           barcode: decodedText,
@@ -60,16 +63,21 @@ const Scanner = () => {
 
       const [productId, foundProduct] = foundEntry;
       logDebug(
-        `Produk ditemukan: id=${productId}, name="${foundProduct.name}", regularPrice=${foundProduct.regularPrice}`
+        `✅ Ditemukan produk: id="${productId}", data=${JSON.stringify(
+          foundProduct
+        )}`
       );
 
-      if (!productId) {
-        logDebug("productId undefined! Tidak dapat melanjutkan transaksi.");
-        toast.error("Terjadi kesalahan: ID produk tidak valid");
+      // Pastikan field 'price' ada di objek
+      if (typeof foundProduct.price !== "number") {
+        logDebug(
+          `‼️ Key "price" tidak ada atau bukan number di produk ${productId}`
+        );
+        toast.error("Data produk tidak valid (price)");
         setLastScan({
           barcode: decodedText,
           status: "error",
-          message: "ID produk tidak valid",
+          message: "Data produk tidak valid",
         });
         return;
       }
@@ -79,47 +87,55 @@ const Scanner = () => {
       logDebug("Memulai runTransaction di /cart/global/items");
 
       const transactionResult = await runTransaction(itemsRef, (currentData) => {
-        logDebug(`runTransaction - currentData: ${JSON.stringify(currentData)}`);
+        logDebug(
+          `runTransaction callback – currentData: ${JSON.stringify(
+            currentData
+          )}`
+        );
 
         const itemsObj = (currentData as Record<string, any>) || {};
 
-        // Cek duplikat
+        // 2.a) Cek duplikat berdasarkan field 'id'
         for (const [key, itemObj] of Object.entries(itemsObj)) {
           if ((itemObj as any).id === productId) {
-            logDebug(`Produk ${productId} sudah ada di cart pada key=${key}.`);
-            return undefined; // batalkan transaksi
+            logDebug(
+              `⚠️ Duplikat: produk ${productId} sudah ada di cart (key="${key}").`
+            );
+            return undefined; // abort transaksi
           }
         }
 
-        // Hitung nextIndex
+        // 2.b) Hitung nextIndex (key numerik berurutan)
         const numericKeys = Object.keys(itemsObj)
           .map((k) => parseInt(k, 10))
           .filter((n) => !isNaN(n));
         const maxKey = numericKeys.length > 0 ? Math.max(...numericKeys) : -1;
         const nextIndex = maxKey + 1;
-        logDebug(`runTransaction - nextIndex = ${nextIndex}`);
+        logDebug(`runTransaction callback – nextIndex: ${nextIndex}`);
 
-        // Tambahkan item baru
+        // 2.c) Tambahkan item baru
         itemsObj[nextIndex.toString()] = {
           id: productId,
           name: foundProduct.name,
           barcode: foundProduct.barcode,
-          price: Number(foundProduct.regularPrice),
+          price: foundProduct.price,
           quantity: 1,
           createdAt: new Date().toISOString(),
         };
         logDebug(
-          `runTransaction - menambahkan di key=${nextIndex}: ${JSON.stringify(
+          `runTransaction callback – menambahkan di key="${nextIndex}": ${JSON.stringify(
             itemsObj[nextIndex.toString()]
           )}`
         );
+
+        // Kembalikan seluruh objek yang diupdate
         return itemsObj;
       });
 
-      logDebug(`runTransaction - result: ${JSON.stringify(transactionResult)}`);
+      logDebug(`runTransaction – result: ${JSON.stringify(transactionResult)}`);
 
       if (!transactionResult.committed) {
-        logDebug(`Transaksi dibatalkan (mungkin duplikat).`);
+        logDebug("⚠️ Transaksi dibatalkan (kemungkinan duplikat).");
         toast.error(`Produk "${foundProduct.name}" sudah ada di cart`);
         setLastScan({
           barcode: decodedText,
@@ -127,19 +143,22 @@ const Scanner = () => {
           message: `Produk "${foundProduct.name}" sudah ada di cart`,
         });
       } else {
-        logDebug(`Transaksi berhasil committed.`);
-        toast.success(`Produk "${foundProduct.name}" berhasil ditambahkan ke cart`);
+        logDebug("✅ Transaksi berhasil committed.");
+        toast.success(
+          `Produk "${foundProduct.name}" berhasil ditambahkan ke cart`
+        );
         setLastScan({
           barcode: decodedText,
           status: "success",
           message: `Produk ditambahkan: ${foundProduct.name}`,
         });
 
+        // Opsional: putar suara notifikasi
         const audio = new Audio("/audio.mp3");
-        audio.play().catch((err) => logDebug(`Error memutar audio: ${err}`));
+        audio.play().catch((err) => logDebug(`Error putar audio: ${err}`));
       }
     } catch (error: any) {
-      logDebug(`Exception di handleScan: ${error}`);
+      logDebug(`❌ Exception di handleScan: ${error}`);
       toast.error("Terjadi kesalahan saat memproses scan");
       setLastScan({
         barcode: decodedText,
@@ -156,12 +175,9 @@ const Scanner = () => {
       }
       await scannerRef.current.start(
         { facingMode: "environment" },
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 },
-        },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
         handleScan,
-        // Hanya log error selain "No barcode or QR code detected"
+        // Filter hanya error yang bukan “No barcode detected”
         (errorMessage: string) => {
           if (!errorMessage.includes("No barcode or QR code detected")) {
             logDebug(`QR Error (serius): ${errorMessage}`);
@@ -170,9 +186,9 @@ const Scanner = () => {
       );
       setIsScanning(true);
       setLastScan(null);
-      logDebug("Scanner berhasil dijalankan.");
+      logDebug("🎥 Scanner berhasil dijalankan.");
     } catch (err) {
-      logDebug(`Gagal memulai scanner: ${err}`);
+      logDebug(`❌ Gagal memulai scanner: ${err}`);
       console.error("Gagal memulai scanner:", err);
       toast.error("Gagal mengaktifkan kamera. Pastikan izin sudah diberikan.");
     }
@@ -183,9 +199,9 @@ const Scanner = () => {
       try {
         await scannerRef.current.stop();
         setIsScanning(false);
-        logDebug("Scanner dihentikan.");
+        logDebug("🛑 Scanner dihentikan.");
       } catch (err) {
-        logDebug(`Error menghentikan scanner: ${err}`);
+        logDebug(`❌ Error menghentikan scanner: ${err}`);
         console.error("Error menghentikan scanner:", err);
       }
     }
@@ -203,7 +219,7 @@ const Scanner = () => {
           .finally(() => {
             setIsScanning(false);
             scannerRef.current = null;
-            logDebug("Scanner otomatis dihentikan saat unmount.");
+            logDebug("ℹ️ Scanner otomatis berhenti saat unmount.");
           });
       }
     };
