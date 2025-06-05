@@ -25,6 +25,20 @@ const Scanner = () => {
     }
   };
 
+  // Fungsi untuk menyalin teks debug console ke clipboard
+  const copyDebugToClipboard = async () => {
+    if (debugRef.current) {
+      const text = debugRef.current.innerText;
+      try {
+        await navigator.clipboard.writeText(text);
+        toast.success("Debug console berhasil disalin");
+      } catch (err) {
+        toast.error("Gagal menyalin debug console");
+        console.error("Copy to clipboard error:", err);
+      }
+    }
+  };
+
   const handleScan = async (decodedText: string) => {
     try {
       logDebug(`--- Mulai handleScan untuk barcode: ${decodedText} ---`);
@@ -113,7 +127,6 @@ const Scanner = () => {
           )}`
         );
 
-        // Kembalikan seluruh itemsObj yang sudah diperbarui
         return itemsObj;
       });
 
@@ -244,8 +257,19 @@ const Scanner = () => {
         )}
       </div>
 
+      {/* Tombol untuk menyalin isi Debug Console */}
+      <div className="mt-4 flex items-center space-x-2">
+        <button
+          onClick={copyDebugToClipboard}
+          className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 transition-colors text-sm"
+        >
+          Copy Debug Console
+        </button>
+        <span className="text-sm text-gray-600">(Klik untuk salin log)</span>
+      </div>
+
       {/* Debug console: tampilkan log sebagai teks di HP */}
-      <div className="mt-4">
+      <div className="mt-2">
         <h3 className="font-medium mb-1">Debug Console:</h3>
         <div
           ref={debugRef}
