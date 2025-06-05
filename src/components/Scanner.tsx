@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
-import { ref, get, runTransaction } from "firebase/database";
+import {
+  ref,
+  get,
+  runTransaction,
+  update,
+  serverTimestamp,
+} from "firebase/database";
 import { db } from "@/lib/firebase";
 import { toast } from "sonner";
 import type { Product } from "@/types/product";
@@ -16,17 +22,15 @@ const Scanner = () => {
 
   const handleScan = async (decodedText: string) => {
     try {
-      // 1) Cari produk berdasarkan barcode di node /products
-      const productRef = ref(db, `products`);
-      const snapshot = await get(productRef);
-      const products = (snapshot.val() as Record<string, Product>) || {};
-
-      const foundProduct = Object.values(products).find(
-        (product) => product.barcode === decodedText
+      // 1) Cari produk berdasarkan barcode di /products
+      const prodSnap = await get(ref(db, "products"));
+      const products = (prodSnap.val() as Record<string, Product>) || {};
+      const entries = Object.entries(products);
+      const foundEntry = entries.find(
+        ([, p]) => p.barcode === decodedText
       );
-
-      if (!foundProduct) {
-        toast.error("Produk tidak ditemukan");
+      if (!foundEntry) {
+        toast.error("Produk tidak ditemukan di database");
         setLastScan({
           barcode: decodedText,
           status: "error",
@@ -34,31 +38,49 @@ const Scanner = () => {
         });
         return;
       }
+      const [productId, foundProduct] = foundEntry;
 
-      // (Logika pemeriksaan stok dan pengurangan stok dihapus di sini)
+      // 2) Transaksi pada /cart/global/items
+      const itemsRef = ref(db, "cart/global/items");
+      const transactionResult = await runTransaction(itemsRef, (currentData) => {
+        // currentData = null (belum ada item sama sekali) atau Object { "0": {...}, "1": {...}, ... }
+        const itemsObj = (currentData as Record<string, any>) || {};
 
-      // 2) Tambahkan ke cart dengan property `price` eksplisit
-      const CART_ID = "global";
-      const itemRef = ref(db, `cart/${CART_ID}/items/${foundProduct.id}`);
-
-      const transactionResult = await runTransaction(itemRef, (currentData) => {
-        if (currentData !== null) {
-          // Jika item sudah ada di cart, batalkan transaksi
-          return;
+        // 2.a) Cek duplikat berdasarkan `id`
+        for (const [key, itemObj] of Object.entries(itemsObj)) {
+          if ((itemObj as any).id === productId) {
+            // Jika sudah ada, batalkan transaksi (return undefined)
+            return undefined;
+          }
         }
 
-        // Jika item belum ada di cart, tambahkan dengan struktur:
-        return {
-          id: foundProduct.id,
+        // 2.b) Hitung nextIndex secara berurutan
+        const numericKeys = Object.keys(itemsObj)
+          .map((k) => {
+            const n = parseInt(k, 10);
+            return isNaN(n) ? -1 : n;
+          })
+          .filter((n) => n >= 0);
+
+        const maxKey = numericKeys.length > 0 ? Math.max(...numericKeys) : -1;
+        const nextIndex = maxKey + 1; // misal, jika keys=[0,1], nextIndex=2
+
+        // 2.c) Tambahkan item baru di index ini
+        itemsObj[nextIndex.toString()] = {
+          id: productId,
           name: foundProduct.name,
           barcode: foundProduct.barcode,
-          price: Number(foundProduct.regularPrice), // ← PENTING: kirim field price
+          price: Number(foundProduct.regularPrice),
           quantity: 1,
-          total: Number(foundProduct.regularPrice) * 1,
+          createdAt: new Date().toISOString(), // atau serverTimestamp()
         };
+
+        // Return objek baru (seluruh `itemsObj`) agar Firebase tulis kembali
+        return itemsObj;
       });
 
       if (!transactionResult.committed) {
+        // Jika runTransaction tidak committed, berarti duplikat ditemukan
         toast.error(`Produk "${foundProduct.name}" sudah ada di cart`);
         setLastScan({
           barcode: decodedText,
@@ -66,24 +88,21 @@ const Scanner = () => {
           message: `Produk "${foundProduct.name}" sudah ada di cart`,
         });
       } else {
-        toast.success(
-          `Produk "${foundProduct.name}" berhasil ditambahkan ke cart`
-        );
+        // Berhasil ditambahkan (commit)
+        toast.success(`Produk "${foundProduct.name}" berhasil ditambahkan ke cart`);
         setLastScan({
           barcode: decodedText,
           status: "success",
           message: `Produk ditambahkan: ${foundProduct.name}`,
         });
 
-        // (Opsional) Putar suara notifikasi
+        // Opsional: putar notifikasi suara
         const audio = new Audio("/audio.mp3");
-        audio.play().catch((err) => {
-          console.error("Error memutar audio:", err);
-        });
+        audio.play().catch((err) => console.error("Error putar audio:", err));
       }
     } catch (error) {
+      console.error("Scan error detail:", error);
       toast.error("Terjadi kesalahan saat memproses scan");
-      console.error("Scan error:", error);
       setLastScan({
         barcode: decodedText,
         status: "error",
@@ -97,7 +116,6 @@ const Scanner = () => {
       if (!scannerRef.current) {
         scannerRef.current = new Html5Qrcode("reader");
       }
-
       await scannerRef.current.start(
         { facingMode: "environment" },
         {
@@ -135,7 +153,7 @@ const Scanner = () => {
         scannerRef.current
           .stop()
           .catch(() => {
-            // sudah tidak aktif, abaikan
+            /* abaikan */
           })
           .finally(() => {
             setIsScanning(false);
