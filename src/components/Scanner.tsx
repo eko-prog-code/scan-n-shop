@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
-import { ref, get, runTransaction, update } from "firebase/database";
+import { ref, get, runTransaction } from "firebase/database";
 import { db } from "@/lib/firebase";
 import { toast } from "sonner";
 import type { Product } from "@/types/product";
@@ -35,34 +35,15 @@ const Scanner = () => {
         return;
       }
 
-      // 2) Cek stok dulu
-      if (foundProduct.stock <= 0) {
-        toast.error("Stok produk habis");
-        setLastScan({
-          barcode: decodedText,
-          status: "error",
-          message: "Stok produk habis",
-        });
-        return;
-      }
+      // (Logika pemeriksaan stok dan pengurangan stok dihapus di sini)
 
-      // 3) Kurangi stok produk (opsional, jika Anda ingin stok berkurang setelah scan)
-      //    Misalnya:
-      await update(ref(db, `products/${foundProduct.id}`), {
-        stock: foundProduct.stock - 1,
-      });
-
-      // 4) Tambahkan ke cart dengan property `price` eksplisit
+      // 2) Tambahkan ke cart dengan property `price` eksplisit
       const CART_ID = "global";
-      // Gunakan product.id sebagai key, jangan gunakan barcode sebagai key di cart
-      // supaya konsisten dengan Index.tsx yang memakai product.id
       const itemRef = ref(db, `cart/${CART_ID}/items/${foundProduct.id}`);
 
       const transactionResult = await runTransaction(itemRef, (currentData) => {
         if (currentData !== null) {
-          // Jika item sudah ada di cart, maka batalkan transaksi (dibatalkan semata-mata karena 
-          // di contoh Anda tidak meningkatkan quantity lewat scan; jika mau menambah quantity, 
-          // Anda bisa mengembalikan objek dengan quantity + 1)
+          // Jika item sudah ada di cart, batalkan transaksi
           return;
         }
 
@@ -73,7 +54,7 @@ const Scanner = () => {
           barcode: foundProduct.barcode,
           price: Number(foundProduct.regularPrice), // ← PENTING: kirim field price
           quantity: 1,
-          total: Number(foundProduct.regularPrice) * 1, // (optional, sesuai Index.tsx)
+          total: Number(foundProduct.regularPrice) * 1,
         };
       });
 
@@ -168,6 +149,7 @@ const Scanner = () => {
     <div className="w-full max-w-lg mx-auto p-4">
       <div className="rounded-lg overflow-hidden shadow-lg bg-white">
         <div id="reader" className="w-full aspect-square" />
+
         {!isScanning && (
           <div className="p-4 text-center">
             <p className="text-gray-600 mb-2">Kamera tidak aktif</p>
@@ -179,6 +161,7 @@ const Scanner = () => {
             </button>
           </div>
         )}
+
         {lastScan && (
           <div
             className={`p-4 border-t ${
