@@ -15,17 +15,14 @@ const Scanner = () => {
     message: string;
   } | null>(null);
 
-  // Fungsi untuk mencetak log ke console dan juga ke elemen debug pada UI
   const logDebug = (msg: string) => {
     console.log(msg);
     if (debugRef.current) {
       debugRef.current.innerText += msg + "\n";
-      // Scroll ke bawah agar log terbaru terlihat
       debugRef.current.scrollTop = debugRef.current.scrollHeight;
     }
   };
 
-  // Fungsi untuk menyalin teks debug console ke clipboard
   const copyDebugToClipboard = async () => {
     if (debugRef.current) {
       const text = debugRef.current.innerText;
@@ -43,7 +40,7 @@ const Scanner = () => {
     try {
       logDebug(`--- Mulai handleScan untuk barcode: ${decodedText} ---`);
 
-      // 1) Cari produk berdasarkan barcode di /products
+      // 1) Cari produk berdasarkan barcode
       const prodSnap = await get(ref(db, "products"));
       const products = (prodSnap.val() as Record<string, Product>) || {};
       logDebug(`Jumlah produk di database: ${Object.keys(products).length}`);
@@ -82,37 +79,27 @@ const Scanner = () => {
       logDebug("Memulai runTransaction di /cart/global/items");
 
       const transactionResult = await runTransaction(itemsRef, (currentData) => {
-        logDebug(
-          `runTransaction callback - currentData sebelum perubahan: ${JSON.stringify(
-            currentData
-          )}`
-        );
+        logDebug(`runTransaction - currentData: ${JSON.stringify(currentData)}`);
 
         const itemsObj = (currentData as Record<string, any>) || {};
 
-        // 2.a) Cek duplikat berdasarkan `id`
+        // Cek duplikat
         for (const [key, itemObj] of Object.entries(itemsObj)) {
           if ((itemObj as any).id === productId) {
-            logDebug(
-              `Produk ${productId} sudah ada di cart pada key=${key}. Membatalkan transaksi.`
-            );
+            logDebug(`Produk ${productId} sudah ada di cart pada key=${key}.`);
             return undefined; // batalkan transaksi
           }
         }
 
-        // 2.b) Hitung nextIndex secara berurutan
+        // Hitung nextIndex
         const numericKeys = Object.keys(itemsObj)
-          .map((k) => {
-            const n = parseInt(k, 10);
-            return isNaN(n) ? -1 : n;
-          })
-          .filter((n) => n >= 0);
-
+          .map((k) => parseInt(k, 10))
+          .filter((n) => !isNaN(n));
         const maxKey = numericKeys.length > 0 ? Math.max(...numericKeys) : -1;
         const nextIndex = maxKey + 1;
-        logDebug(`runTransaction callback - nextIndex yang dihitung: ${nextIndex}`);
+        logDebug(`runTransaction - nextIndex = ${nextIndex}`);
 
-        // 2.c) Tambahkan item baru di index tersebut
+        // Tambahkan item baru
         itemsObj[nextIndex.toString()] = {
           id: productId,
           name: foundProduct.name,
@@ -122,11 +109,10 @@ const Scanner = () => {
           createdAt: new Date().toISOString(),
         };
         logDebug(
-          `runTransaction callback - menambahkan item baru di key="${nextIndex}": ${JSON.stringify(
+          `runTransaction - menambahkan di key=${nextIndex}: ${JSON.stringify(
             itemsObj[nextIndex.toString()]
           )}`
         );
-
         return itemsObj;
       });
 
@@ -149,7 +135,6 @@ const Scanner = () => {
           message: `Produk ditambahkan: ${foundProduct.name}`,
         });
 
-        // (Opsional) Putar suara notifikasi
         const audio = new Audio("/audio.mp3");
         audio.play().catch((err) => logDebug(`Error memutar audio: ${err}`));
       }
@@ -176,8 +161,11 @@ const Scanner = () => {
           qrbox: { width: 250, height: 250 },
         },
         handleScan,
+        // Hanya log error selain "No barcode or QR code detected"
         (errorMessage: string) => {
-          logDebug(`QR Error: ${errorMessage}`);
+          if (!errorMessage.includes("No barcode or QR code detected")) {
+            logDebug(`QR Error (serius): ${errorMessage}`);
+          }
         }
       );
       setIsScanning(true);
