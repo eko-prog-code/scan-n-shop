@@ -20,7 +20,7 @@ const Scanner = () => {
       const prodSnap = await get(ref(db, "products"));
       const products = (prodSnap.val() as Record<string, Product>) || {};
 
-      // Cari product berdasarkan barcode
+      // Cari entry [key, productObj] yang barcode-nya cocok
       const entries = Object.entries(products);
       const foundEntry = entries.find(([, p]) => p.barcode === decodedText);
 
@@ -36,9 +36,9 @@ const Scanner = () => {
 
       const [productId, foundProduct] = foundEntry;
 
-      // Pastikan field 'price' ada
+      // Pastikan field 'price' ada di objek
       if (typeof foundProduct.price !== "number") {
-        toast.error("Data produk tidak valid");
+        toast.error("Data produk tidak valid (price)");
         setLastScan({
           barcode: decodedText,
           status: "error",
@@ -47,26 +47,26 @@ const Scanner = () => {
         return;
       }
 
-      // 2) runTransaction di /cart/global/items
+      // 2) Jalankan runTransaction pada /cart/global/items
       const itemsRef = ref(db, "cart/global/items");
       const transactionResult = await runTransaction(itemsRef, (currentData) => {
         const itemsObj = (currentData as Record<string, any>) || {};
 
-        // Cek duplikat berdasarkan field 'id'
-        for (const itemObj of Object.values(itemsObj)) {
+        // 2.a) Cek duplikat berdasarkan field 'id'
+        for (const [, itemObj] of Object.entries(itemsObj)) {
           if ((itemObj as any).id === productId) {
-            return undefined; // abort transaksi jika duplikat
+            return undefined; // abort transaksi
           }
         }
 
-        // Hitung nextIndex (key numerik)
+        // 2.b) Hitung nextIndex (key numerik berurutan)
         const numericKeys = Object.keys(itemsObj)
           .map((k) => parseInt(k, 10))
           .filter((n) => !isNaN(n));
         const maxKey = numericKeys.length > 0 ? Math.max(...numericKeys) : -1;
         const nextIndex = maxKey + 1;
 
-        // Tambahkan item baru
+        // 2.c) Tambahkan item baru
         itemsObj[nextIndex.toString()] = {
           id: productId,
           name: foundProduct.name,
@@ -80,21 +80,23 @@ const Scanner = () => {
       });
 
       if (!transactionResult.committed) {
-        toast.error(`Produk "${foundEntry[1].name}" sudah ada di cart`);
+        toast.error(`Produk "${foundProduct.name}" sudah ada di cart`);
         setLastScan({
           barcode: decodedText,
           status: "error",
-          message: `Produk "${foundEntry[1].name}" sudah ada di cart`,
+          message: `Produk "${foundProduct.name}" sudah ada di cart`,
         });
       } else {
-        toast.success(`Produk "${foundEntry[1].name}" berhasil ditambahkan ke cart`);
+        toast.success(
+          `Produk "${foundProduct.name}" berhasil ditambahkan ke cart`
+        );
         setLastScan({
           barcode: decodedText,
           status: "success",
-          message: `Produk ditambahkan: ${foundEntry[1].name}`,
+          message: `Produk ditambahkan: ${foundProduct.name}`,
         });
 
-        // (Opsional) putar notifikasi suara
+        // Opsional: putar suara notifikasi
         const audio = new Audio("/audio.mp3");
         audio.play().catch(() => {});
       }
@@ -118,7 +120,7 @@ const Scanner = () => {
         { fps: 10, qrbox: { width: 250, height: 250 } },
         handleScan,
         () => {
-          // kosongkan atau abaikan error "No barcode detected"
+          // tidak perlu menampilkan error QR yang tidak penting
         }
       );
       setIsScanning(true);
@@ -134,7 +136,7 @@ const Scanner = () => {
         await scannerRef.current.stop();
         setIsScanning(false);
       } catch {
-        // abaikan
+        // abaikan jika gagal menghentikan
       }
     }
   };
@@ -155,8 +157,8 @@ const Scanner = () => {
   }, []);
 
   return (
-    <div className="w-full max-w-md mx-auto p-4">
-      <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+    <div className="w-full max-w-lg mx-auto p-4">
+      <div className="rounded-lg overflow-hidden shadow-lg bg-white">
         <div id="reader" className="w-full aspect-square" />
 
         {!isScanning && (
