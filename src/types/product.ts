@@ -3,12 +3,8 @@ export interface Product {
   id: string;
   image: string;
   name: string;
-  regularPrice: number;
+  regularPrice: number; // atau ganti ke 'price' agar konsisten
   stock: number;
   quantity?: number;
-}
-
-export interface CartItem extends Product {
-  quantity: number;
-  addedAt: string; // Waktu penambahan ke cart (ISO string)
+  createdAt?: string; // tambahan untuk timestamp
 }
