@@ -3,7 +3,7 @@ import { Html5Qrcode } from "html5-qrcode";
 import { ref, get, runTransaction } from "firebase/database";
 import { db } from "@/lib/firebase";
 import { toast } from "sonner";
-import type { CartItem } from "@/types/product";
+import type { Product, CartItem } from "@/types/product";
 
 const Scanner = () => {
   const scannerRef = useRef<Html5Qrcode | null>(null);
@@ -25,11 +25,11 @@ const Scanner = () => {
       const foundEntry = entries.find(([, p]) => p.barcode === decodedText);
 
       if (!foundEntry) {
-        toast.error("Product not found in database");
+        toast.error("Produk tidak ditemukan");
         setLastScan({
           barcode: decodedText,
           status: "error",
-          message: "Product not found in database",
+          message: "Produk tidak ditemukan di database",
         });
         return;
       }
@@ -38,11 +38,11 @@ const Scanner = () => {
 
       // Validate product price
       if (typeof foundProduct.regularPrice !== "number") {
-        toast.error("Invalid product data (price)");
+        toast.error("Data produk tidak valid");
         setLastScan({
           barcode: decodedText,
           status: "error",
-          message: "Invalid product data",
+          message: "Harga produk tidak valid",
         });
         return;
       }
@@ -55,7 +55,7 @@ const Scanner = () => {
         // 2.a) Check for duplicate items
         for (const [, itemObj] of Object.entries(itemsObj)) {
           if (itemObj.id === productId) {
-            return undefined; // abort transaction if item exists
+            return undefined; // abort if product exists
           }
         }
 
@@ -71,38 +71,38 @@ const Scanner = () => {
           ...foundProduct,
           id: productId,
           quantity: 1,
-          addedAt: new Date().toISOString(), // Add timestamp here
+          price: foundProduct.regularPrice, // Use regularPrice as price
+          addedAt: new Date().toISOString(),
         };
 
         return itemsObj;
       });
 
       if (!transactionResult.committed) {
-        toast.error(`Product "${foundProduct.name}" already in cart`);
+        toast.error(`Produk "${foundProduct.name}" sudah ada di keranjang`);
         setLastScan({
           barcode: decodedText,
           status: "error",
-          message: `Product "${foundProduct.name}" already in cart`,
+          message: `Produk "${foundProduct.name}" sudah ada di keranjang`,
         });
       } else {
-        toast.success(`"${foundProduct.name}" added to cart`);
+        toast.success(`"${foundProduct.name}" ditambahkan ke keranjang`);
         setLastScan({
           barcode: decodedText,
           status: "success",
-          message: `Added: ${foundProduct.name}`,
+          message: `Berhasil: ${foundProduct.name}`,
         });
 
         // Play notification sound
-        const audio = new Audio("/audio.mp3");
-        audio.play().catch(() => {});
+        new Audio("/audio.mp3").play().catch(() => {});
       }
     } catch (error) {
       console.error("Scan error:", error);
-      toast.error("Error processing scan");
+      toast.error("Gagal memproses scan");
       setLastScan({
         barcode: decodedText,
         status: "error",
-        message: "Error processing scan",
+        message: "Gagal memproses scan",
       });
     }
   };
@@ -116,15 +116,13 @@ const Scanner = () => {
         { facingMode: "environment" },
         { fps: 10, qrbox: { width: 250, height: 250 } },
         handleScan,
-        () => {
-          // Quietly handle QR reading errors
-        }
+        () => {} // Quietly handle QR reading errors
       );
       setIsScanning(true);
       setLastScan(null);
     } catch (error) {
-      console.error("Scanner start error:", error);
-      toast.error("Failed to start camera. Please check permissions.");
+      console.error("Scanner error:", error);
+      toast.error("Gagal mengaktifkan kamera");
     }
   };
 
@@ -134,7 +132,7 @@ const Scanner = () => {
         await scannerRef.current.stop();
         setIsScanning(false);
       } catch (error) {
-        console.error("Scanner stop error:", error);
+        console.error("Stop scanner error:", error);
       }
     }
   };
@@ -142,15 +140,7 @@ const Scanner = () => {
   useEffect(() => {
     startScanner();
     return () => {
-      if (scannerRef.current && isScanning) {
-        scannerRef.current
-          .stop()
-          .catch(() => {})
-          .finally(() => {
-            setIsScanning(false);
-            scannerRef.current = null;
-          });
-      }
+      stopScanner();
     };
   }, []);
 
@@ -161,31 +151,27 @@ const Scanner = () => {
 
         {!isScanning && (
           <div className="p-4 text-center">
-            <p className="text-gray-600 mb-2">Camera inactive</p>
+            <p className="text-gray-600 mb-2">Kamera tidak aktif</p>
             <button
               onClick={startScanner}
               className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
             >
-              Start Scanner
+              Mulai Scanner
             </button>
           </div>
         )}
 
         {lastScan && (
-          <div
-            className={`p-4 border-t ${
-              lastScan.status === "success" ? "bg-green-50" : "bg-red-50"
-            }`}
-          >
-            <p className="font-medium mb-1">Last Scan:</p>
-            <p className="text-sm text-gray-600">Barcode: {lastScan.barcode}</p>
-            <p
-              className={`text-sm ${
-                lastScan.status === "success" ? "text-green-600" : "text-red-600"
-              }`}
-            >
-              {lastScan.message}
+          <div className={`p-4 border-t ${
+            lastScan.status === "success" 
+              ? "bg-green-50 text-green-800" 
+              : "bg-red-50 text-red-800"
+          }`}>
+            <p className="font-medium mb-1">
+              {lastScan.status === "success" ? "Berhasil" : "Gagal"}
             </p>
+            <p className="text-sm">Barcode: {lastScan.barcode}</p>
+            <p className="text-sm mt-1">{lastScan.message}</p>
           </div>
         )}
       </div>
