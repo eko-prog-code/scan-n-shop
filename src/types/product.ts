@@ -1,4 +1,3 @@
-
 export interface Product {
   barcode: string;
   id: string;
@@ -7,4 +6,9 @@ export interface Product {
   regularPrice: number;
   stock: number;
   quantity?: number;
+}
+
+export interface CartItem extends Product {
+  quantity: number;
+  addedAt: string; // Waktu penambahan ke cart (ISO string)
 }
